@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GLtoy</title>
+    <script src="index.js"></script>
+</head>
+<body>
+    <textarea id="vshader-source">
+attribute vec3 aVertexPosition;
+
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
+
+void main(void) {
+  gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+}
+    </textarea>
+    <textarea id="fshader-source">
+void main(void) {
+  gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+}
+    </textarea>
+    <canvas id="main-canvas" width="720" height="720"></canvas>
+</body>
+</html>
+
