@@ -32,6 +32,24 @@ class Toy {
         GL.attachShader(this.program, this.fshader);
     }
 
+    loadGist(id) {
+        fetch(`https://api.github.com/gists/${id}`).
+            then(resp => {
+                if (!resp.ok) throw "could not load";
+                return resp.json();
+            }).
+            then(
+                data => {this.populate(data.files); this.reload();},
+                () => alert("Failed to load Gist."));
+    }
+
+    populate(files) {
+        this.vshaderTA.value = files.vertex_shader.content;
+        this.fshaderTA.value = files.fragment_shader.content;
+        this.verticesTA.value = files.vertices.content;
+        this.trianglesTA.value = files.triangles.content;
+    }
+
     loadShaders(vshaderSource, fshaderSource) {
         GL.shaderSource(this.vshader, vshaderSource);
         GL.shaderSource(this.fshader, fshaderSource);
@@ -118,7 +136,12 @@ function main() {
         "fshader-source", "vertices", "triangles", "reload"].
         map(i => document.getElementById(i));
     toy = new Toy(...controls);
-    toy.reload();
+    window.onhashchange = () => {
+        if (window.location.hash)
+            toy.loadGist(window.location.hash.slice(1))
+    };
+    if (window.location.hash) toy.loadGist(window.location.hash.slice(1));
+    else toy.reload();
 }
 
 window.onload = main;
