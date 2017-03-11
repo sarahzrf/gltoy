@@ -1,3 +1,5 @@
+#define GL (this.gl)
+
 class Toy {
     constructor(canvas, vshaderTA, fshaderTA, verticesTA, trianglesTA) {
         this.gl = canvas.getContext('webgl');
@@ -8,52 +10,52 @@ class Toy {
 
         this.initGL();
         this.initShaders();
-        this.vbuffer = this.gl.createBuffer();
-        this.ebuffer = this.gl.createBuffer();
+        this.vbuffer = GL.createBuffer();
+        this.ebuffer = GL.createBuffer();
     }
 
     initGL() {
-        this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        this.gl.clearDepth(1.0);
-        this.gl.enable(this.gl.DEPTH_TEST);
-        this.gl.depthFunc(this.gl.LESS);
+        GL.clearColor(0.0, 0.0, 0.0, 1.0);
+        GL.clearDepth(1.0);
+        GL.enable(GL.DEPTH_TEST);
+        GL.depthFunc(GL.LESS);
     }
 
     initShaders() {
-        this.vshader = this.gl.createShader(this.gl.VERTEX_SHADER);
-        this.fshader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        this.program = this.gl.createProgram();
-        this.gl.attachShader(this.program, this.vshader);
-        this.gl.attachShader(this.program, this.fshader);
+        this.vshader = GL.createShader(GL.VERTEX_SHADER);
+        this.fshader = GL.createShader(GL.FRAGMENT_SHADER);
+        this.program = GL.createProgram();
+        GL.attachShader(this.program, this.vshader);
+        GL.attachShader(this.program, this.fshader);
     }
 
     loadShaders() {
         let vshaderSource = this.vshaderTA.value,
             fshaderSource = this.fshaderTA.value;
-        this.gl.shaderSource(this.vshader, vshaderSource);
-        this.gl.shaderSource(this.fshader, fshaderSource);
-        this.gl.compileShader(this.vshader);
+        GL.shaderSource(this.vshader, vshaderSource);
+        GL.shaderSource(this.fshader, fshaderSource);
+        GL.compileShader(this.vshader);
         let err = false;
-        if (!this.gl.getShaderParameter(
-            this.vshader, this.gl.COMPILE_STATUS)) {
+        if (!GL.getShaderParameter(
+            this.vshader, GL.COMPILE_STATUS)) {
             alert("An error occurred compiling the vertex shader: " +
-                this.gl.getShaderInfoLog(this.vshader));
+                GL.getShaderInfoLog(this.vshader));
             err = true;
         }
-        this.gl.compileShader(this.fshader);
-        if (!this.gl.getShaderParameter(
-            this.fshader, this.gl.COMPILE_STATUS)) {
+        GL.compileShader(this.fshader);
+        if (!GL.getShaderParameter(
+            this.fshader, GL.COMPILE_STATUS)) {
             alert("An error occurred compiling the fragment shader: " +
-                this.gl.getShaderInfoLog(this.fshader));
+                GL.getShaderInfoLog(this.fshader));
             err = true;
         }
         if (err) throw "shader compilation error";
-        this.gl.linkProgram(this.program);
-        this.gl.useProgram(this.program);
+        GL.linkProgram(this.program);
+        GL.useProgram(this.program);
     }
 
     loadVertices(dat) {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vbuffer);
+        GL.bindBuffer(GL.ARRAY_BUFFER, this.vbuffer);
         let lines = dat.split("\n"),
             attrs = lines.shift().split(/\s+/).filter(a => !!a),
             offset = 0;
@@ -67,32 +69,30 @@ class Toy {
         let vals = lines.map(l => l.split(/\s+/).
             filter(v => !!v).map(parseFloat)).
             reduce((a, b) => a.concat(b));
-        this.gl.bufferData(this.gl.ARRAY_BUFFER,
-            new Float32Array(vals), this.gl.STATIC_DRAW);
+        GL.bufferData(GL.ARRAY_BUFFER,
+            new Float32Array(vals), GL.STATIC_DRAW);
         let stride = offset;
         attrs.forEach(([name, size, offset]) => {
-            let attr = this.gl.getAttribLocation(this.program, name);
+            let attr = GL.getAttribLocation(this.program, name);
             if (attr == -1) return;
-            this.gl.enableVertexAttribArray(attr);
-            this.gl.vertexAttribPointer(attr, size, this.gl.FLOAT, false,
+            GL.enableVertexAttribArray(attr);
+            GL.vertexAttribPointer(attr, size, GL.FLOAT, false,
                 stride * 4, offset * 4);
         });
     }
 
     loadTriangles(dat) {
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.ebuffer);
+        GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebuffer);
         let lines = dat.split("\n"),
             vals = lines.map(l => l.split(/\s+/).
             filter(v => !!v).map(v => parseInt(v))).
             reduce((a, b) => a.concat(b));
-        this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER,
-            new Uint16Array(vals), this.gl.STATIC_DRAW);
+        GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,
+            new Uint16Array(vals), GL.STATIC_DRAW);
         this.numTriangles = vals.length;
     }
 
     main() {
-        let gl = this.gl;
-
         // buffers
         this.loadVertices(this.verticesTA.value);
         this.loadTriangles(this.trianglesTA.value);
@@ -102,16 +102,14 @@ class Toy {
     }
 
     draw() {
-        let gl = this.gl;
+        let tUniform = GL.getUniformLocation(this.program, "time");
+        if (tUniform != -1) GL.uniform1f(tUniform, performance.now() / 1000);
 
-        let tUniform = gl.getUniformLocation(this.program, "time");
-        if (tUniform != -1) gl.uniform1f(tUniform, performance.now() / 1000);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbuffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ebuffer);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        gl.drawElements(gl.TRIANGLES, this.numTriangles,
-            gl.UNSIGNED_SHORT, 0);
+        GL.bindBuffer(GL.ARRAY_BUFFER, this.vbuffer);
+        GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebuffer);
+        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+        GL.drawElements(GL.TRIANGLES, this.numTriangles,
+            GL.UNSIGNED_SHORT, 0);
     }
 }
 
