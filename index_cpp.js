@@ -1,17 +1,20 @@
 #define GL (this.gl)
 
 class Toy {
-    constructor(canvas, vshaderTA, fshaderTA, verticesTA, trianglesTA) {
+    constructor(canvas, vshaderTA, fshaderTA,
+        verticesTA, trianglesTA, rButton) {
         this.gl = canvas.getContext('webgl');
         this.vshaderTA = vshaderTA;
         this.fshaderTA = fshaderTA;
         this.verticesTA = verticesTA;
         this.trianglesTA = trianglesTA;
+        this.rButton = rButton;
 
         this.initGL();
         this.initShaders();
         this.vbuffer = GL.createBuffer();
         this.ebuffer = GL.createBuffer();
+        rButton.onclick = () => this.reload();
     }
 
     initGL() {
@@ -29,9 +32,7 @@ class Toy {
         GL.attachShader(this.program, this.fshader);
     }
 
-    loadShaders() {
-        let vshaderSource = this.vshaderTA.value,
-            fshaderSource = this.fshaderTA.value;
+    loadShaders(vshaderSource, fshaderSource) {
         GL.shaderSource(this.vshader, vshaderSource);
         GL.shaderSource(this.fshader, fshaderSource);
         GL.compileShader(this.vshader);
@@ -56,46 +57,45 @@ class Toy {
 
     loadVertices(dat) {
         GL.bindBuffer(GL.ARRAY_BUFFER, this.vbuffer);
-        let lines = dat.split("\n"),
-            attrs = lines.shift().split(/\s+/).filter(a => !!a),
-            offset = 0;
-        attrs = attrs.map(a => {
-            let [, name, , size] = a.match(/([^\[]+)(\[([^\]]+)\])?/);
-            size = size ? parseInt(size) : 1;
-            let attr = [name, size, offset];
-            offset += size;
-            return attr;
-        });
-        let vals = lines.map(l => l.split(/\s+/).
-            filter(v => !!v).map(parseFloat)).
-            reduce((a, b) => a.concat(b));
         GL.bufferData(GL.ARRAY_BUFFER,
-            new Float32Array(vals), GL.STATIC_DRAW);
-        let stride = offset;
+            new Float32Array(dat.data), GL.STATIC_DRAW);
+        let total_offset = 0,
+            attrs = dat.attributes.map(([name, size]) => {
+                let res = [name, size, total_offset];
+                total_offset += size;
+                return res;
+            });
         attrs.forEach(([name, size, offset]) => {
             let attr = GL.getAttribLocation(this.program, name);
-            if (attr == -1) return;
+            if (attr === -1) return;
             GL.enableVertexAttribArray(attr);
             GL.vertexAttribPointer(attr, size, GL.FLOAT, false,
-                stride * 4, offset * 4);
+                total_offset * 4, offset * 4);
         });
     }
 
     loadTriangles(dat) {
         GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebuffer);
-        let lines = dat.split("\n"),
-            vals = lines.map(l => l.split(/\s+/).
-            filter(v => !!v).map(v => parseInt(v))).
-            reduce((a, b) => a.concat(b));
         GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,
-            new Uint16Array(vals), GL.STATIC_DRAW);
-        this.numTriangles = vals.length;
+            new Uint16Array(dat), GL.STATIC_DRAW);
+        this.numTriangles = dat.length;
     }
 
-    main() {
-        // buffers
-        this.loadVertices(this.verticesTA.value);
-        this.loadTriangles(this.trianglesTA.value);
+    reload() {
+        var vdat, tdat;
+        try {vdat = Function(this.verticesTA.value)();}
+        catch (e) {
+            alert("An error occurred evaluating the vertices: " + e);
+            throw e;
+        }
+        try {tdat = Function(this.trianglesTA.value)();}
+        catch (e) {
+            alert("An error occurred evaluating the triangles: " + e);
+            throw e;
+        }
+        this.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
+        this.loadVertices(vdat);
+        this.loadTriangles(tdat);
 
         if (this.interval) clearInterval(this.interval);
         this.interval = setInterval(() => this.draw(), 0.0333);
@@ -115,13 +115,10 @@ class Toy {
 
 function main() {
     let controls = ["main-canvas", "vshader-source",
-        "fshader-source", "vertices", "triangles"].
-        map(i => document.getElementById(i)),
-        rButton = document.querySelector("#reload");
+        "fshader-source", "vertices", "triangles", "reload"].
+        map(i => document.getElementById(i));
     toy = new Toy(...controls);
-    rButton.onclick = () => {toy.loadShaders(); toy.main();};
-    toy.loadShaders();
-    toy.main();
+    toy.reload();
 }
 
 window.onload = main;
