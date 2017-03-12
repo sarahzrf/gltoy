@@ -2,13 +2,14 @@
 
 class Toy {
     constructor(canvas, vshaderTA, fshaderTA,
-        verticesTA, trianglesTA, rButton, sButton) {
+        verticesTA, trianglesTA, rButton, lButton, sButton) {
         this.gl = canvas.getContext('webgl');
         this.vshaderTA = vshaderTA;
         this.fshaderTA = fshaderTA;
         this.verticesTA = verticesTA;
         this.trianglesTA = trianglesTA;
         this.rButton = rButton;
+        this.lButton = lButton;
         this.sButton = sButton;
 
         this.initGL();
@@ -16,6 +17,10 @@ class Toy {
         this.vbuffer = GL.createBuffer();
         this.ebuffer = GL.createBuffer();
         rButton.onclick = () => this.reload();
+        lButton.onclick = () => {
+            let id = prompt("Enter the Gist id:");
+            if (id) window.location.hash = id;
+        }
         sButton.onclick = () => this.save();
     }
 
@@ -157,7 +162,7 @@ class Toy {
 
 function main() {
     let controls = ["main-canvas", "vshader-source",
-        "fshader-source", "vertices", "triangles", "reload", "save"].
+        "fshader-source", "vertices", "triangles", "reload", "load", "save"].
         map(i => document.getElementById(i));
     toy = new Toy(...controls);
     window.onhashchange = () => {
