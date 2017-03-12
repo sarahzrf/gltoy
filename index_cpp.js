@@ -2,41 +2,40 @@
 
 class Toy {
     constructor(canvas, vshaderTA, fshaderTA,
-        verticesTA, trianglesTA, rButton, lButton, sButton) {
+        verticesTA, trianglesTA, lButton, sButton, rButton) {
         this.gl = canvas.getContext('webgl');
         this.vshaderTA = vshaderTA;
         this.fshaderTA = fshaderTA;
         this.verticesTA = verticesTA;
         this.trianglesTA = trianglesTA;
-        this.rButton = rButton;
         this.lButton = lButton;
         this.sButton = sButton;
+        this.rButton = rButton;
+        this.bindEvents();
 
         this.initGL();
         this.initShaders();
         this.vbuffer = GL.createBuffer();
         this.ebuffer = GL.createBuffer();
-        rButton.onclick = () => this.reload();
-        lButton.onclick = () => {
-            let id = prompt("Enter the Gist id:");
-            if (id) window.location.hash = id;
-        }
-        sButton.onclick = () => this.save();
     }
 
-    initGL() {
-        GL.clearColor(0.0, 0.0, 0.0, 1.0);
-        GL.clearDepth(1.0);
-        GL.enable(GL.DEPTH_TEST);
-        GL.depthFunc(GL.LESS);
+    bindEvents() {
+        document.body.onkeydown = e => {
+            if (!e.ctrlKey) return;
+            if (e.keyCode == 79) this.load();
+            else if (e.keyCode == 83) this.save();
+            else if (e.keyCode == 13) this.reload();
+            else return;
+            e.preventDefault();
+        };
+        this.lButton.onclick = () => this.load();
+        this.sButton.onclick = () => this.save();
+        this.rButton.onclick = () => this.reload();
     }
 
-    initShaders() {
-        this.vshader = GL.createShader(GL.VERTEX_SHADER);
-        this.fshader = GL.createShader(GL.FRAGMENT_SHADER);
-        this.program = GL.createProgram();
-        GL.attachShader(this.program, this.vshader);
-        GL.attachShader(this.program, this.fshader);
+    load() {
+        let id = prompt("Enter the Gist id:");
+        if (id) window.location.hash = id;
     }
 
     loadGist(id) {
@@ -77,6 +76,21 @@ class Toy {
             then(
                 data => alert(`Saved Gist ${window.location.hash=data.id}.`),
                 () => alert("Failed to save Gist."));
+    }
+
+    initGL() {
+        GL.clearColor(0.0, 0.0, 0.0, 1.0);
+        GL.clearDepth(1.0);
+        GL.enable(GL.DEPTH_TEST);
+        GL.depthFunc(GL.LESS);
+    }
+
+    initShaders() {
+        this.vshader = GL.createShader(GL.VERTEX_SHADER);
+        this.fshader = GL.createShader(GL.FRAGMENT_SHADER);
+        this.program = GL.createProgram();
+        GL.attachShader(this.program, this.vshader);
+        GL.attachShader(this.program, this.fshader);
     }
 
     loadShaders(vshaderSource, fshaderSource) {
@@ -162,7 +176,7 @@ class Toy {
 
 function main() {
     let controls = ["main-canvas", "vshader-source",
-        "fshader-source", "vertices", "triangles", "reload", "load", "save"].
+        "fshader-source", "vertices", "triangles", "load", "save", "reload"].
         map(i => document.getElementById(i));
     toy = new Toy(...controls);
     window.onhashchange = () => {
