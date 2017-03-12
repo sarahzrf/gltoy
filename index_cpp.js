@@ -2,19 +2,21 @@
 
 class Toy {
     constructor(canvas, vshaderTA, fshaderTA,
-        verticesTA, trianglesTA, rButton) {
+        verticesTA, trianglesTA, rButton, sButton) {
         this.gl = canvas.getContext('webgl');
         this.vshaderTA = vshaderTA;
         this.fshaderTA = fshaderTA;
         this.verticesTA = verticesTA;
         this.trianglesTA = trianglesTA;
         this.rButton = rButton;
+        this.sButton = sButton;
 
         this.initGL();
         this.initShaders();
         this.vbuffer = GL.createBuffer();
         this.ebuffer = GL.createBuffer();
         rButton.onclick = () => this.reload();
+        sButton.onclick = () => this.save();
     }
 
     initGL() {
@@ -44,10 +46,32 @@ class Toy {
     }
 
     populate(files) {
-        this.vshaderTA.value = files.vertex_shader.content;
-        this.fshaderTA.value = files.fragment_shader.content;
-        this.verticesTA.value = files.vertices.content;
-        this.trianglesTA.value = files.triangles.content;
+        ({
+            vertex_shader: {content: this.vshaderTA.value},
+            fragment_shader: {content: this.fshaderTA.value},
+            vertices: {content: this.verticesTA.value},
+            triangles: {content: this.trianglesTA.value}
+        } = files);
+    }
+
+    save() {
+        if (!confirm(
+            "Are you sure? You can't delete anonymous Gists!")) return;
+        let files = {
+            vertex_shader: {content: this.vshaderTA.value},
+            fragment_shader: {content: this.fshaderTA.value},
+            vertices: {content: this.verticesTA.value},
+            triangles: {content: this.trianglesTA.value}
+        },
+            body = JSON.stringify({files});
+        fetch("https://api.github.com/gists", {method: 'POST', body}).
+            then(resp => {
+                if (!resp.ok) throw "could not save";
+                return resp.json();
+            }).
+            then(
+                data => alert(`Saved Gist ${window.location.hash=data.id}.`),
+                () => alert("Failed to save Gist."));
     }
 
     loadShaders(vshaderSource, fshaderSource) {
@@ -133,7 +157,7 @@ class Toy {
 
 function main() {
     let controls = ["main-canvas", "vshader-source",
-        "fshader-source", "vertices", "triangles", "reload"].
+        "fshader-source", "vertices", "triangles", "reload", "save"].
         map(i => document.getElementById(i));
     toy = new Toy(...controls);
     window.onhashchange = () => {
