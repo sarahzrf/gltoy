@@ -57,7 +57,16 @@ void main(void) {
     </div>
     <div id="data">
         Vertices<br>
-        <textarea id="vertices" rows="14" cols="50">
+        <textarea id="vertices" rows="14" cols="60">
+/*
+ * Put JS code for the body of a function here.
+ * It will be called on each reload.
+ * Return an object with keys "attributes" and "data".
+ * "attributes" should be a list of pairs of attribute
+ * names and sizes.
+ * "data" should be a one-dimensional array of floats
+ * of consecutively packed vertex attributes.
+ */
 return {
 attributes: [
   ["aVertexPosition", 3], ["which", 1]],
@@ -70,7 +79,13 @@ data: [
 </textarea>
         <br><br>
         Triangles<br>
-        <textarea id="triangles" rows="14" cols="50">
+        <textarea id="triangles" rows="14" cols="60">
+/*
+ * Put JS code for the body of a function here.
+ * It will be called on each reload.
+ * Return a one-dimensional array of vertex indices,
+ * three per triangle.
+ */
 return [
   0, 1, 2,
   0, 1, 3,
@@ -80,7 +95,7 @@ return [
 </textarea>
         <br><br>
         Uniforms (<code>time</code> provided automatically)<br>
-        <textarea id="uniforms" rows="14" cols="50">
+        <textarea id="uniforms" rows="14" cols="60">
 to be implemented</textarea>
     </div>
     <div id="buttons">
