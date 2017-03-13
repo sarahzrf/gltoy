@@ -1,30 +1,34 @@
 #define GL (this.gl)
 
 class Toy {
-    constructor(canvas, vshaderTA, fshaderTA,
-        verticesTA, trianglesTA, lButton, sButton, rButton) {
+    constructor(canvas,
+        vshaderTA, fshaderTA, uniformsTA,
+        verticesTA, trianglesTA,
+        lButton, sButton, rButton) {
         this.gl = canvas.getContext('webgl');
+        this.vbuffer = GL.createBuffer();
+        this.ebuffer = GL.createBuffer();
+        this.textures = {};
+        this.initGL();
+        this.initShaders();
+
         this.vshaderTA = vshaderTA;
         this.fshaderTA = fshaderTA;
+        this.uniformsTA = uniformsTA;
         this.verticesTA = verticesTA;
         this.trianglesTA = trianglesTA;
         this.lButton = lButton;
         this.sButton = sButton;
         this.rButton = rButton;
         this.bindEvents();
-
-        this.initGL();
-        this.initShaders();
-        this.vbuffer = GL.createBuffer();
-        this.ebuffer = GL.createBuffer();
     }
 
     bindEvents() {
         document.body.onkeydown = e => {
             if (!e.ctrlKey) return;
-            if (e.keyCode == 79) this.load();
-            else if (e.keyCode == 83) this.save();
-            else if (e.keyCode == 13) this.reload();
+            if (e.keyCode === 79) this.load();
+            else if (e.keyCode === 83) this.save();
+            else if (e.keyCode === 13) this.reload();
             else return;
             e.preventDefault();
         };
@@ -54,7 +58,8 @@ class Toy {
             vertex_shader: {content: this.vshaderTA.value},
             fragment_shader: {content: this.fshaderTA.value},
             vertices: {content: this.verticesTA.value},
-            triangles: {content: this.trianglesTA.value}
+            triangles: {content: this.trianglesTA.value},
+            uniforms: {content: this.uniformsTA.value}
         } = files);
     }
 
@@ -65,7 +70,8 @@ class Toy {
             vertex_shader: {content: this.vshaderTA.value},
             fragment_shader: {content: this.fshaderTA.value},
             vertices: {content: this.verticesTA.value},
-            triangles: {content: this.trianglesTA.value}
+            triangles: {content: this.trianglesTA.value},
+            uniforms: {content: this.uniformsTA.value}
         },
             body = JSON.stringify({files});
         fetch("https://api.github.com/gists", {method: 'POST', body}).
@@ -142,8 +148,58 @@ class Toy {
         this.numTriangles = dat.length;
     }
 
+    loadUniforms(dat) {
+        this.texturesUsed = this.constTextures = 0;
+        this.uniformFuns = [];
+        Object.entries(dat).forEach(([name, val]) => {
+            let uni = GL.getUniformLocation(this.program, name);
+            if (uni === -1) return;
+            if (typeof val === 'function') this.uniformFuns.push([uni, val]);
+            else this.setUniform(uni, val);
+        });
+        this.constTextures = this.texturesUsed;
+    }
+
+    textureN(n) {
+        if (!this.textures[n]) {
+            this.textures[n] = GL.createTexture();
+        }
+        return this.textures[n];
+    }
+
+    setUniform(uni, val) {
+        if (typeof val === 'number') GL.uniform1f(uni, val);
+        else if (typeof val === 'array') {
+            let size = val.length;
+            if (typeof val[0] === 'array') {
+                if (size == 2) GL.uniformMatrix2fv(uni, val);
+                else if (size == 3) GL.uniformMatrix3fv(uni, val);
+                else if (size == 4) GL.uniformMatrix4fv(uni, val);
+            }
+            else {
+                if (size == 2) GL.uniform2fv(uni, val);
+                else if (size == 3) GL.uniform3fv(uni, val);
+                else if (size == 4) GL.uniform4fv(uni, val);
+            }
+        }
+        else {
+            let ix = this.texturesUsed++,
+                texture = this.textureN(ix);
+            GL.activeTexture(GL[`TEXTURE${ix}`]);
+            GL.bindTexture(GL.TEXTURE_2D, texture);
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+            GL.texParameteri(
+                GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+            GL.texParameteri(
+                GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+            GL.texImage2D(GL.TEXTURE_2D,
+                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, val);
+            GL.uniform1i(uni, ix);
+        }
+    }
+
     reload() {
-        var vdat, tdat;
+        var vdat, tdat, udatP;
         try {vdat = Function(this.verticesTA.value)();}
         catch (e) {
             alert("An error occurred evaluating the vertices: " + e);
@@ -154,30 +210,62 @@ class Toy {
             alert("An error occurred evaluating the triangles: " + e);
             throw e;
         }
-        this.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
-        this.loadVertices(vdat);
-        this.loadTriangles(tdat);
+        try {udatP = Function(this.uniformsTA.value)();}
+        catch (e) {
+            alert("An error occurred evaluating the uniforms: " + e);
+            throw e;
+        }
+        if (!(udatP instanceof Promise)) udatP =
+            new Promise(resolve => resolve(udatP));
+        udatP.then(udat => {
+            this.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
+            this.loadVertices(vdat);
+            this.loadTriangles(tdat);
+            this.loadUniforms(udat);
 
-        if (this.interval) clearInterval(this.interval);
-        this.interval = setInterval(() => this.draw(), 0.0333);
+            this.start();
+        },
+            err => alert("The uniform promise rejected: " + err));
+    }
+
+    start() {
+        if (!this.drawing) {
+            this.drawing = true;
+            requestAnimationFrame(() => this.draw());
+        }
+    }
+
+    stop() {
+        this.drawing = false;
+    }
+
+    evalUniformFuns() {
+        this.uniformFuns.forEach(([uni, fun]) => {
+            this.setUniform(uni, fun());
+        });
+        this.texturesUsed = this.constTextures;
     }
 
     draw() {
-        let tUniform = GL.getUniformLocation(this.program, "time");
-        if (tUniform != -1) GL.uniform1f(tUniform, performance.now() / 1000);
+        this.evalUniformFuns();
 
         GL.bindBuffer(GL.ARRAY_BUFFER, this.vbuffer);
         GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebuffer);
         GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
         GL.drawElements(GL.TRIANGLES, this.numTriangles,
             GL.UNSIGNED_SHORT, 0);
+
+        if (this.drawing) requestAnimationFrame(() => this.draw());
     }
 }
 
 function main() {
-    let controls = ["main-canvas", "vshader-source",
-        "fshader-source", "vertices", "triangles", "load", "save", "reload"].
-        map(i => document.getElementById(i));
+    let controls = [
+        "main-canvas",
+        "vshader-source", "fshader-source", "uniforms",
+        "vertices", "triangles",
+        "load", "save", "reload"
+    ].map(i => document.getElementById(i));
     toy = new Toy(...controls);
     window.onhashchange = () => {
         if (window.location.hash)

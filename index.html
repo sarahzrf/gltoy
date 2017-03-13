@@ -94,9 +94,10 @@ return [
 ];
 </textarea>
         <br><br>
-        Uniforms (<code>time</code> provided automatically)<br>
+        Uniforms<br>
         <textarea id="uniforms" rows="14" cols="60">
-to be implemented</textarea>
+return {time: () => performance.now() / 1000};
+</textarea>
     </div>
     <div id="buttons">
         <button id="load">Load Gist (ctrl+O)</button>
