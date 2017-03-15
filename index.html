@@ -96,6 +96,20 @@ return [
         <br><br>
         Uniforms<br>
         <textarea id="uniforms" rows="14" cols="60">
+/*
+ * Put JS code for the body of a function here.
+ * It will be called on each reload.
+ * Return an object whose keys are uniform names
+ * and whose values are values for those uniforms.
+ * Possible kinds of value are:
+ * - A float (for GLSL float)
+ * - An array of floats (for GLSL vectors)
+ * - An array of arrays of floats (for square GLSL matrices)
+ * - A zero-arg function returning one of the above, to be
+ *   called for the uniform's value each frame
+ * - A string containing the URL of an image or video
+ *   usable in an <img> or <video> tag (for GLSL sampler2D)
+ */
 return {time: () => performance.now() / 1000};
 </textarea>
     </div>

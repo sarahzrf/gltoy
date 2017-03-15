@@ -9,6 +9,7 @@ class Toy {
         this.vbuffer = GL.createBuffer();
         this.ebuffer = GL.createBuffer();
         this.textures = {};
+        this.texCache = {};
         this.initGL();
         this.initShaders();
 
@@ -149,22 +150,37 @@ class Toy {
     }
 
     loadUniforms(dat) {
-        this.texturesUsed = this.constTextures = 0;
         this.uniformFuns = [];
+        let textureURLs = [];
         Object.entries(dat).forEach(([name, val]) => {
             let uni = GL.getUniformLocation(this.program, name);
             if (uni === -1) return;
             if (typeof val === 'function') this.uniformFuns.push([uni, val]);
+            else if (typeof val === 'string') textureURLs.push([uni, val]);
             else this.setUniform(uni, val);
         });
-        this.constTextures = this.texturesUsed;
-    }
-
-    textureN(n) {
-        if (!this.textures[n]) {
-            this.textures[n] = GL.createTexture();
-        }
-        return this.textures[n];
+        this.vidTextures = [];
+        return Promise.all(textureURLs.map(([uni, url], ix) =>
+            this.loadTexture(url, uni, ix).then(el => {
+                let glIx = GL[`TEXTURE${ix}`],
+                    texture = this.textures[ix];
+                if (!texture) {
+                    texture = this.textures[ix] = GL.createTexture();
+                }
+                GL.activeTexture(glIx);
+                GL.bindTexture(GL.TEXTURE_2D, texture);
+                GL.texParameteri(
+                    GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+                GL.texParameteri(
+                    GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+                GL.texParameteri(
+                    GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+                GL.texImage2D(GL.TEXTURE_2D,
+                    0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, el);
+                GL.uniform1i(uni, ix);
+                if (el instanceof HTMLVideoElement)
+                    this.vidTextures.push([glIx, el]);
+        })));
     }
 
     setUniform(uni, val) {
@@ -182,24 +198,46 @@ class Toy {
                 else if (size == 4) GL.uniform4fv(uni, val);
             }
         }
-        else {
-            let ix = this.texturesUsed++,
-                texture = this.textureN(ix);
-            GL.activeTexture(GL[`TEXTURE${ix}`]);
-            GL.bindTexture(GL.TEXTURE_2D, texture);
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
-            GL.texParameteri(
-                GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
-            GL.texParameteri(
-                GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
-            GL.texImage2D(GL.TEXTURE_2D,
-                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, val);
-            GL.uniform1i(uni, ix);
-        }
+    }
+
+    loadTexture(url, uni, ix) {
+        if (url in this.texCache)
+            return this.texCache[url];
+        return this.texCache[url] = fetch(url).then(resp => {
+            if (!resp.ok) throw `could not load ${resp.url}`;
+            let mime = resp.headers.get('Content-Type'),
+                el, loaded;
+            if (mime.match('^video/')) {
+                el = document.createElement('video');
+                loaded = new Promise((res, rej) => {
+                    el.oncanplay = () => {
+                        el.loop = true;
+                        el.play();
+                        res(el);
+                    };
+                    el.onerror = () =>
+                        rej(`${resp.url} contains bad video data`);
+                });
+            }
+            else if (mime.match('^image/')) {
+                el = new Image();
+                loaded = new Promise((res, rej) => {
+                    el.onload = () => res(el);
+                    el.onerror = () =>
+                        rej(`${resp.url} contains bad image data`);
+                });
+            }
+            else throw `${resp.url} not a video or image`;
+
+            return resp.blob().then(blob => {
+                el.src = URL.createObjectURL(blob);
+                return loaded;
+            });
+        });
     }
 
     reload() {
-        var vdat, tdat, udatP;
+        var vdat, tdat, udat;
         try {vdat = Function(this.verticesTA.value)();}
         catch (e) {
             alert("An error occurred evaluating the vertices: " + e);
@@ -210,22 +248,16 @@ class Toy {
             alert("An error occurred evaluating the triangles: " + e);
             throw e;
         }
-        try {udatP = Function(this.uniformsTA.value)();}
+        try {udat = Function(this.uniformsTA.value)();}
         catch (e) {
             alert("An error occurred evaluating the uniforms: " + e);
             throw e;
         }
-        if (!(udatP instanceof Promise)) udatP =
-            new Promise(resolve => resolve(udatP));
-        udatP.then(udat => {
-            this.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
-            this.loadVertices(vdat);
-            this.loadTriangles(tdat);
-            this.loadUniforms(udat);
-
-            this.start();
-        },
-            err => alert("The uniform promise rejected: " + err));
+        this.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
+        this.loadVertices(vdat);
+        this.loadTriangles(tdat);
+        this.loadUniforms(udat).then(() => this.start(),
+            err => alert("Failed to load some textures: " + err));
     }
 
     start() {
@@ -239,15 +271,19 @@ class Toy {
         this.drawing = false;
     }
 
-    evalUniformFuns() {
+    recalcUniforms() {
+        this.vidTextures.forEach(([glIx, vid]) => {
+            GL.activeTexture(glIx);
+            GL.texImage2D(GL.TEXTURE_2D,
+                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, vid);
+        });
         this.uniformFuns.forEach(([uni, fun]) => {
             this.setUniform(uni, fun());
         });
-        this.texturesUsed = this.constTextures;
     }
 
     draw() {
-        this.evalUniformFuns();
+        this.recalcUniforms();
 
         GL.bindBuffer(GL.ARRAY_BUFFER, this.vbuffer);
         GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebuffer);
