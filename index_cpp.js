@@ -1,4 +1,5 @@
 #define GL (this.gl)
+#define SCENE (this.scene)
 
 class MediaCache {
     constructor() {
@@ -42,22 +43,21 @@ class MediaCache {
     }
 }
 
-// assumptions: only one Scene gets to fuck with the vao, the current program,
-// the uniforms, and the texture bindings at any given time. anything else is
-// fair game. a Scene may assume that it is the currently-active one at any
-// point between an invocation of setup() on it and an invocation of cleanup()
-// on it.
+// A Scene should not mess with any shared GL state besides bindings
 
 class Scene {
     constructor(gl, cache) {
         this.gl = gl;
         this.cache = cache;
-        this.textures = {};
 
         this.vbo = GL.createBuffer();
         this.ebo = GL.createBuffer();
         this.program = GL.createProgram();
-        this.enabledAttribs = [];
+        this.attribs = [];
+        this.constUniforms = [];
+        this.funUniforms = [];
+        this.textures = [];
+        this.vidTextures = [];
     }
 
     ready() {
@@ -68,7 +68,7 @@ class Scene {
         GL.deleteBuffer(this.vbo);
         GL.deleteBuffer(this.ebo);
         GL.deleteProgram(this.program);
-        this.enabledAttribs.forEach(a => GL.disableVertexAttribArray(a));
+        this.textures.forEach(([glIx, t]) => GL.deleteTexture(t));
     }
 
     loadShaders(vshaderSource, fshaderSource) {
@@ -105,23 +105,13 @@ class Scene {
         GL.bufferData(GL.ARRAY_BUFFER,
             new Float32Array(dat.data), GL.STATIC_DRAW);
         let total_offset = 0;
-        this.attribs = dat.attributes.map(([name, size]) => {
-            let res = [name, size, total_offset];
-            total_offset += size * 4;
-            return res;
-        });
-        this.stride = total_offset;
-    }
-
-    setupVertices() {
-        this.attribs.forEach(([name, size, offset]) => {
+        dat.attributes.forEach(([name, size]) => {
             let attrib = GL.getAttribLocation(this.program, name);
             if (attrib === -1) return;
-            this.enabledAttribs.push(attrib);
-            GL.enableVertexAttribArray(attrib);
-            GL.vertexAttribPointer(attrib, size, GL.FLOAT, false,
-                this.stride, offset);
+            this.attribs.push([attrib, size, total_offset]);
+            total_offset += size * 4;
         });
+        this.stride = total_offset;
     }
 
     loadTriangles(dat) {
@@ -132,45 +122,76 @@ class Scene {
     }
 
     loadUniforms(dat) {
-        this.constUniforms = [];
-        this.uniformFuns = [];
-        let textureURLs = [];
+        let texturePs = [],
+            textureIx = 0;
         Object.entries(dat).forEach(([name, val]) => {
             let uni = GL.getUniformLocation(this.program, name);
             if (uni === -1) return;
-            if (typeof val === 'function') this.uniformFuns.push([uni, val]);
-            else if (typeof val === 'string') textureURLs.push([uni, val]);
+            if (typeof val === 'function') this.funUniforms.push([uni, val]);
+            else if (typeof val === 'string') {
+                let ix = textureIx++,
+                    p = this.cache.load(val).then(el =>
+                        this.loadTexture(uni, ix, el));
+                this.constUniforms.push([uni, {sampler: true, ix}]);
+                texturePs.push(p);
+            }
             else this.constUniforms.push([uni, val]);
         });
-        this.textureUniforms = [];
-        return Promise.all(textureURLs.map(([uni, url], ix) =>
-            this.cache.load(url).then(el => this.textureUniforms.push([uni, ix, el]))));
+        return Promise.all(texturePs);
     }
 
-    setupUniforms() {
-        this.constUniforms.forEach(([uni, val]) => {
-            this.setUniform(uni, val);
+    loadTexture(uni, ix, el) {
+        let glIx = GL[`TEXTURE${ix}`],
+            texture = GL.createTexture();
+        this.textures.push([glIx, texture]);
+        if (el instanceof HTMLVideoElement)
+            this.vidTextures.push([glIx, el]);
+
+        GL.bindTexture(GL.TEXTURE_2D, texture);
+        GL.texParameteri(
+            GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+        GL.texParameteri(
+            GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+        GL.texParameteri(
+            GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+        GL.texImage2D(GL.TEXTURE_2D,
+            0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, el);
+    }
+}
+
+class Renderer {
+    constructor(gl) {
+        this.gl = gl;
+        this.enabledAttribs = [];
+    }
+
+    useScene(scene) {
+        if (!scene.ready()) throw "scene not ready";
+        this.cleanup();
+        this.setup(scene);
+    }
+
+    cleanup() {
+        if (this.scene) this.scene.cleanup();
+        this.enabledAttribs.forEach(a => GL.disableVertexAttribArray(a));
+        this.enabledAttribs = [];
+    }
+
+    setup(scene) {
+        this.scene = scene;
+
+        GL.useProgram(SCENE.program);
+
+        GL.bindBuffer(GL.ARRAY_BUFFER, SCENE.vbo);
+        SCENE.attribs.forEach(([attrib, size, offset]) => {
+            this.enabledAttribs.push(attrib);
+            GL.enableVertexAttribArray(attrib);
+            GL.vertexAttribPointer(attrib, size, GL.FLOAT, false,
+                SCENE.stride, offset);
         });
-        this.vidTextures = [];
-        this.textureUniforms.forEach(([uni, ix, el]) => {
-            let glIx = GL[`TEXTURE${ix}`],
-                texture = this.textures[ix];
-            if (!texture) {
-                texture = this.textures[ix] = GL.createTexture();
-            }
-            GL.activeTexture(glIx);
-            GL.bindTexture(GL.TEXTURE_2D, texture);
-            GL.texParameteri(
-                GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
-            GL.texParameteri(
-                GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
-            GL.texParameteri(
-                GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
-            GL.texImage2D(GL.TEXTURE_2D,
-                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, el);
-            GL.uniform1i(uni, ix);
-            if (el instanceof HTMLVideoElement)
-                this.vidTextures.push([glIx, el]);
+
+        SCENE.constUniforms.forEach(([uni, val]) => {
+            this.setUniform(uni, val);
         });
     }
 
@@ -189,46 +210,7 @@ class Scene {
                 else if (size === 4) GL.uniform4fv(uni, val);
             }
         }
-    }
-
-    setup() {
-        GL.useProgram(this.program);
-        this.setupVertices();
-        this.setupUniforms();
-    }
-
-    recalcUniforms() {
-        this.vidTextures.forEach(([glIx, vid]) => {
-            GL.activeTexture(glIx);
-            GL.texImage2D(GL.TEXTURE_2D,
-                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, vid);
-        });
-        this.uniformFuns.forEach(([uni, fun]) => {
-            this.setUniform(uni, fun());
-        });
-    }
-
-    draw() {
-        this.recalcUniforms();
-
-        GL.bindBuffer(GL.ARRAY_BUFFER, this.vbo);
-        GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebo);
-        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
-        GL.drawElements(GL.TRIANGLES, this.numTriangles,
-            GL.UNSIGNED_SHORT, 0);
-    }
-}
-
-class Renderer {
-    constructor(gl) {
-        this.gl = gl;
-    }
-
-    setScene(scene) {
-        if (!scene.ready()) throw "scene not ready";
-        if (this.scene) this.scene.cleanup();
-        scene.setup();
-        this.scene = scene;
+        else if (val.sampler) GL.uniform1i(uni, val.ix);
     }
 
     start() {
@@ -243,6 +225,26 @@ class Renderer {
         if (this.drawing) this.stopped = true;
     }
 
+    bind() {
+        GL.bindBuffer(GL.ARRAY_BUFFER, SCENE.vbo);
+        GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, SCENE.ebo);
+        SCENE.textures.forEach(([glIx, texture]) => {
+            GL.activeTexture(glIx);
+            GL.bindTexture(GL.TEXTURE_2D, texture);
+        });
+    }
+
+    recalcUniforms() {
+        SCENE.vidTextures.forEach(([glIx, vid]) => {
+            GL.activeTexture(glIx);
+            GL.texImage2D(GL.TEXTURE_2D,
+                0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, vid);
+        });
+        SCENE.funUniforms.forEach(([uni, fun]) => {
+            this.setUniform(uni, fun());
+        });
+    }
+
     draw() {
         if (this.stopped) {
             this.stopped = false;
@@ -250,30 +252,28 @@ class Renderer {
             return;
         }
 
-        this.scene.draw();
+        this.bind();
+        this.recalcUniforms();
+        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+        GL.drawElements(GL.TRIANGLES, SCENE.numTriangles,
+            GL.UNSIGNED_SHORT, 0);
+
         requestAnimationFrame(() => this.draw());
     }
 }
 
 class Toy {
-    constructor(canvas,
-        vshaderTA, fshaderTA, uniformsTA,
-        verticesTA, trianglesTA,
-        lButton, sButton, rButton) {
+    constructor(canvas, ...controls) {
         this.gl = canvas.getContext('webgl');
         this.initGL();
 
         this.renderer = new Renderer(this.gl);
         this.cache = new MediaCache();
 
-        this.vshaderTA = vshaderTA;
-        this.fshaderTA = fshaderTA;
-        this.uniformsTA = uniformsTA;
-        this.verticesTA = verticesTA;
-        this.trianglesTA = trianglesTA;
-        this.lButton = lButton;
-        this.sButton = sButton;
-        this.rButton = rButton;
+        [this.container,
+            this.vshaderTA, this.fshaderTA, this.uniformsTA,
+            this.verticesTA, this.trianglesTA,
+            this.lButton, this.sButton, this.rButton] = controls;
         this.bindEvents();
     }
 
@@ -285,7 +285,7 @@ class Toy {
     }
 
     bindEvents() {
-        document.body.onkeydown = e => {
+        this.container.onkeydown = e => {
             if (!e.ctrlKey) return;
             if (e.keyCode === 79) this.load();
             else if (e.keyCode === 83) this.save();
@@ -367,19 +367,25 @@ class Toy {
         scene.loadVertices(vdat);
         scene.loadTriangles(tdat);
         scene.loadUniforms(udat).then(
-            () => {this.renderer.setScene(scene); this.renderer.start()},
-            err => alert("Failed to load some textures: " + err));
+            () => {
+                this.renderer.useScene(scene);
+                this.renderer.start();
+            },
+            err => {
+                scene.cleanup();
+                alert("Failed to load some textures: " + err)
+            });
     }
 }
 
 function main() {
-    let controls = [
-        "main-canvas",
+    let canvas = document.getElementById("main-canvas"),
+        controls = [
         "vshader-source", "fshader-source", "uniforms",
         "vertices", "triangles",
         "load", "save", "reload"
     ].map(i => document.getElementById(i));
-    toy = new Toy(...controls);
+    toy = new Toy(canvas, document.body, ...controls);
     window.onhashchange = () => {
         if (window.location.hash)
             toy.loadGist(window.location.hash.slice(1))
