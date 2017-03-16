@@ -179,14 +179,14 @@ class Scene {
         else if (typeof val === 'array') {
             let size = val.length;
             if (typeof val[0] === 'array') {
-                if (size == 2) GL.uniformMatrix2fv(uni, val);
-                else if (size == 3) GL.uniformMatrix3fv(uni, val);
-                else if (size == 4) GL.uniformMatrix4fv(uni, val);
+                if (size === 2) GL.uniformMatrix2fv(uni, val);
+                else if (size === 3) GL.uniformMatrix3fv(uni, val);
+                else if (size === 4) GL.uniformMatrix4fv(uni, val);
             }
             else {
-                if (size == 2) GL.uniform2fv(uni, val);
-                else if (size == 3) GL.uniform3fv(uni, val);
-                else if (size == 4) GL.uniform4fv(uni, val);
+                if (size === 2) GL.uniform2fv(uni, val);
+                else if (size === 3) GL.uniform3fv(uni, val);
+                else if (size === 4) GL.uniform4fv(uni, val);
             }
         }
     }
