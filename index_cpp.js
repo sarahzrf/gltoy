@@ -197,14 +197,16 @@ class Renderer {
 
     setUniform(uni, val) {
         if (typeof val === 'number') GL.uniform1f(uni, val);
-        else if (typeof val === 'array') {
+        else if (val instanceof Array) {
             let size = val.length;
-            if (typeof val[0] === 'array') {
-                if (size === 2) GL.uniformMatrix2fv(uni, val);
-                else if (size === 3) GL.uniformMatrix3fv(uni, val);
-                else if (size === 4) GL.uniformMatrix4fv(uni, val);
+            if (val[0] instanceof Array) {
+                val = new Float32Array([].concat(...val));
+                if (size === 2) GL.uniformMatrix2fv(uni, false, val);
+                else if (size === 3) GL.uniformMatrix3fv(uni, false, val);
+                else if (size === 4) GL.uniformMatrix4fv(uni, false, val);
             }
             else {
+                val = new Float32Array(val);
                 if (size === 2) GL.uniform2fv(uni, val);
                 else if (size === 3) GL.uniform3fv(uni, val);
                 else if (size === 4) GL.uniform4fv(uni, val);

@@ -104,7 +104,8 @@ return [
  * Possible kinds of value are:
  * - A float (for GLSL float)
  * - An array of floats (for GLSL vectors)
- * - An array of arrays of floats (for square GLSL matrices)
+ * - An array of arrays of floats
+ *   (for square GLSL matrices) (column-major)
  * - A zero-arg function returning one of the above, to be
  *   called for the uniform's value each frame
  * - A string containing the URL of an image or video
