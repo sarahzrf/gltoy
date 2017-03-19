@@ -107,8 +107,8 @@ class Scene {
         let total_offset = 0;
         dat.attributes.forEach(([name, size]) => {
             let attrib = GL.getAttribLocation(this.program, name);
-            if (attrib === -1) return;
-            this.attribs.push([attrib, size, total_offset]);
+            if (attrib !== -1)
+                this.attribs.push([attrib, size, total_offset]);
             total_offset += size * 4;
         });
         this.stride = total_offset;
