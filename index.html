@@ -61,7 +61,8 @@ void main(void) {
 /*
  * Put JS code for the body of a function here.
  * It will be called on each reload.
- * Return an object with keys "attributes" and "data".
+ * Return an object with keys "attributes" and "data",
+ * or a promise resolving to such an object.
  * "attributes" should be a list of pairs of attribute
  * names and sizes.
  * "data" should be a one-dimensional array of floats
@@ -84,7 +85,8 @@ data: [
  * Put JS code for the body of a function here.
  * It will be called on each reload.
  * Return a one-dimensional array of vertex indices,
- * three per triangle.
+ * three per triangle, or a promise resolving to such
+ * an array.
  */
 return [
   0, 1, 2,
@@ -100,7 +102,8 @@ return [
  * Put JS code for the body of a function here.
  * It will be called on each reload.
  * Return an object whose keys are uniform names
- * and whose values are values for those uniforms.
+ * and whose values are values for those uniforms,
+ * or a promise resolving to such an object.
  * Possible kinds of value are:
  * - A float (for GLSL float)
  * - An array of floats (for GLSL vectors)

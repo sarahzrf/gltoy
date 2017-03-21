@@ -1,6 +1,18 @@
 #define GL (this.gl)
 #define SCENE (this.scene)
 
+// a utility
+
+function failSlow(promises) {
+    let res = [], rej = [],
+        saving = promises.map(promise =>
+            promise.then(x => res.unshift(x), e => rej.unshift(e)));
+    return Promise.all(saving).then(() => {
+        if (rej.length === 0) return res;
+        else throw [].concat(...rej);
+    });
+}
+
 class MediaCache {
     constructor() {
         this.media = {};
@@ -39,7 +51,8 @@ class MediaCache {
                 el.src = URL.createObjectURL(blob);
                 return loaded;
             });
-        });
+        },
+        e => {throw `could not load ${url}: ${e}`;});
     }
 }
 
@@ -80,24 +93,22 @@ class Scene {
         GL.shaderSource(vshader, vshaderSource);
         GL.shaderSource(fshader, fshaderSource);
         GL.compileShader(vshader);
-        let err = false;
+        let errs = [];
         if (!GL.getShaderParameter(
             vshader, GL.COMPILE_STATUS)) {
-            alert("An error occurred compiling the vertex shader: " +
+            errs.push("while compiling the vertex shader:\n" +
                 GL.getShaderInfoLog(vshader));
-            err = true;
         }
         GL.compileShader(fshader);
         if (!GL.getShaderParameter(
             fshader, GL.COMPILE_STATUS)) {
-            alert("An error occurred compiling the fragment shader: " +
+            errs.push("while compiling the fragment shader:\n" +
                 GL.getShaderInfoLog(fshader));
-            err = true;
         }
-        if (!err) GL.linkProgram(this.program);
+        if (errs.length === 0) GL.linkProgram(this.program);
         GL.deleteShader(vshader);
         GL.deleteShader(fshader);
-        if (err) throw "shader compilation error";
+        if (errs.length !== 0) throw errs;
     }
 
     loadVertices(dat) {
@@ -347,35 +358,33 @@ class Toy {
                 () => alert("Failed to save Gist."));
     }
 
+    // I should proooobably clean this up
     reload() {
-        let vdat, tdat, udat;
-        try {vdat = Function(this.verticesTA.value)();}
-        catch (e) {
-            alert("An error occurred evaluating the vertices: " + e);
-            throw e;
-        }
-        try {tdat = Function(this.trianglesTA.value)();}
-        catch (e) {
-            alert("An error occurred evaluating the triangles: " + e);
-            throw e;
-        }
-        try {udat = Function(this.uniformsTA.value)();}
-        catch (e) {
-            alert("An error occurred evaluating the uniforms: " + e);
-            throw e;
-        }
         let scene = new Scene(this.gl, this.cache);
-        scene.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
-        scene.loadVertices(vdat);
-        scene.loadTriangles(tdat);
-        scene.loadUniforms(udat).then(
+        new Promise(res => {
+            scene.loadShaders(this.vshaderTA.value, this.fshaderTA.value);
+            res();
+        }).then(() => {
+            let vtu = [
+                [this.verticesTA, scene.loadVertices, "the vertices"],
+                [this.trianglesTA, scene.loadTriangles, "the triangles"],
+                [this.uniformsTA, scene.loadUniforms, "the uniforms"]
+            ];
+            return failSlow(vtu.map(([ta, load, where]) =>
+                new Promise(res => res(Function(ta.value)())).
+                catch(e => {throw `while evaluating ${where}: ${e}`;}).
+                then(dat =>
+                    new Promise(res => res(load.bind(scene)(dat))).
+                    catch(e => {throw `while loading ${where}: ${e}`;}))));
+        }).then(
             () => {
                 this.renderer.useScene(scene);
                 this.renderer.start();
             },
-            err => {
+            errs => {
                 scene.cleanup();
-                alert("Failed to load some textures: " + err)
+                if (errs instanceof Array) errs.forEach(alert);
+                else alert(errs);
             });
     }
 }
