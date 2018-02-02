@@ -1,6 +1,3 @@
-#define GL (this.gl)
-#define SCENE (this.scene)
-
 // a utility
 
 function failSlow(promises) {
@@ -58,31 +55,22 @@ class MediaCache {
 
 // A Scene should not mess with any shared GL state besides bindings
 
-class Scene {
-    constructor(gl, cache) {
-        this.gl = gl;
-        this.cache = cache;
-
-        this.vbo = GL.createBuffer();
-        this.ebo = GL.createBuffer();
-        this.program = GL.createProgram();
-        this.attribs = [];
-        this.constUniforms = [];
-        this.funUniforms = [];
-        this.textures = [];
-        this.vidTextures = [];
-    }
-
-    ready() {
-        return true;
-    }
+function Scene(GL, cache) {return {
+    vbo: GL.createBuffer(),
+    ebo: GL.createBuffer(),
+    program: GL.createProgram(),
+    attribs: [],
+    constUniforms: [],
+    funUniforms: [],
+    textures: [],
+    vidTextures: [],
 
     cleanup() {
         GL.deleteBuffer(this.vbo);
         GL.deleteBuffer(this.ebo);
         GL.deleteProgram(this.program);
-        this.textures.forEach(([glIx, t]) => GL.deleteTexture(t));
-    }
+        this.textures.forEach(([, t]) => GL.deleteTexture(t));
+    },
 
     loadShaders(vshaderSource, fshaderSource) {
         let vshader = GL.createShader(GL.VERTEX_SHADER),
@@ -109,7 +97,7 @@ class Scene {
         GL.deleteShader(vshader);
         GL.deleteShader(fshader);
         if (errs.length !== 0) throw errs;
-    }
+    },
 
     loadVertices(dat) {
         GL.bindBuffer(GL.ARRAY_BUFFER, this.vbo);
@@ -123,14 +111,14 @@ class Scene {
             total_offset += size * 4;
         });
         this.stride = total_offset;
-    }
+    },
 
     loadTriangles(dat) {
         GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, this.ebo);
         GL.bufferData(GL.ELEMENT_ARRAY_BUFFER,
             new Uint16Array(dat), GL.STATIC_DRAW);
         this.numTriangles = dat.length;
-    }
+    },
 
     loadUniforms(dat) {
         let texturePs = [],
@@ -141,7 +129,7 @@ class Scene {
             if (typeof val === 'function') this.funUniforms.push([uni, val]);
             else if (typeof val === 'string') {
                 let ix = textureIx++,
-                    p = this.cache.load(val).then(el =>
+                    p = cache.load(val).then(el =>
                         this.loadTexture(uni, ix, el));
                 this.constUniforms.push([uni, {sampler: true, ix}]);
                 texturePs.push(p);
@@ -149,7 +137,7 @@ class Scene {
             else this.constUniforms.push([uni, val]);
         });
         return Promise.all(texturePs);
-    }
+    },
 
     loadTexture(uni, ix, el) {
         let glIx = GL[`TEXTURE${ix}`],
@@ -168,28 +156,25 @@ class Scene {
         GL.texImage2D(GL.TEXTURE_2D,
             0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, el);
     }
-}
+};}
 
-class Renderer {
-    constructor(gl) {
-        this.gl = gl;
-        this.enabledAttribs = [];
-    }
+function Renderer(GL) {var SCENE; return {
+    enabledAttribs: [],
 
     useScene(scene) {
-        if (!scene.ready()) throw "scene not ready";
+        /* if (!scene.ready()) throw "scene not ready"; */
         this.cleanup();
         this.setup(scene);
-    }
+    },
 
     cleanup() {
-        if (this.scene) this.scene.cleanup();
+        if (SCENE) SCENE.cleanup();
         this.enabledAttribs.forEach(a => GL.disableVertexAttribArray(a));
         this.enabledAttribs = [];
-    }
+    },
 
     setup(scene) {
-        this.scene = scene;
+        SCENE = scene;
 
         GL.useProgram(SCENE.program);
 
@@ -204,7 +189,7 @@ class Renderer {
         SCENE.constUniforms.forEach(([uni, val]) => {
             this.setUniform(uni, val);
         });
-    }
+    },
 
     setUniform(uni, val) {
         if (typeof val === 'number') GL.uniform1f(uni, val);
@@ -224,19 +209,19 @@ class Renderer {
             }
         }
         else if (val.sampler) GL.uniform1i(uni, val.ix);
-    }
+    },
 
     start() {
-        if (!this.scene) throw "no scene";
+        if (!SCENE) throw "no scene";
         if (!this.drawing) {
             this.drawing = true;
             requestAnimationFrame(() => this.draw());
         }
-    }
+    },
 
     stop() {
         if (this.drawing) this.stopped = true;
-    }
+    },
 
     bind() {
         GL.bindBuffer(GL.ARRAY_BUFFER, SCENE.vbo);
@@ -245,7 +230,7 @@ class Renderer {
             GL.activeTexture(glIx);
             GL.bindTexture(GL.TEXTURE_2D, texture);
         });
-    }
+    },
 
     recalcUniforms() {
         SCENE.vidTextures.forEach(([glIx, vid]) => {
@@ -256,7 +241,7 @@ class Renderer {
         SCENE.funUniforms.forEach(([uni, fun]) => {
             this.setUniform(uni, fun());
         });
-    }
+    },
 
     draw() {
         if (this.stopped) {
@@ -273,7 +258,7 @@ class Renderer {
 
         requestAnimationFrame(() => this.draw());
     }
-}
+};}
 
 class Toy {
     constructor(canvas, ...controls) {
@@ -291,10 +276,10 @@ class Toy {
     }
 
     initGL() {
-        GL.clearColor(0.0, 0.0, 0.0, 1.0);
-        GL.clearDepth(1.0);
-        GL.enable(GL.DEPTH_TEST);
-        GL.depthFunc(GL.LESS);
+        this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        this.gl.clearDepth(1.0);
+        this.gl.enable(this.gl.DEPTH_TEST);
+        this.gl.depthFunc(this.gl.LESS);
     }
 
     bindEvents() {
@@ -341,12 +326,12 @@ class Toy {
         if (!confirm(
             "Are you sure? You can't delete anonymous Gists!")) return;
         let files = {
-            vertex_shader: {content: this.vshaderTA.value},
-            fragment_shader: {content: this.fshaderTA.value},
-            vertices: {content: this.verticesTA.value},
-            triangles: {content: this.trianglesTA.value},
-            uniforms: {content: this.uniformsTA.value}
-        },
+                vertex_shader: {content: this.vshaderTA.value},
+                fragment_shader: {content: this.fshaderTA.value},
+                vertices: {content: this.verticesTA.value},
+                triangles: {content: this.trianglesTA.value},
+                uniforms: {content: this.uniformsTA.value}
+            },
             body = JSON.stringify({files});
         fetch("https://api.github.com/gists", {method: 'POST', body}).
             then(resp => {
@@ -372,10 +357,11 @@ class Toy {
             ];
             return failSlow(vtu.map(([ta, load, where]) =>
                 new Promise(res => res(Function(ta.value)())).
-                catch(e => {throw `while evaluating ${where}: ${e}`;}).
-                then(dat =>
-                    new Promise(res => res(load.bind(scene)(dat))).
-                    catch(e => {throw `while loading ${where}: ${e}`;}))));
+                    catch(e => {throw `while evaluating ${where}: ${e}`;}).
+                    then(dat =>
+                        new Promise(res => res(load.bind(scene)(dat))).
+                            catch(e => {throw `while loading ${where}: ${e}`;})
+                    )));
         }).then(
             () => {
                 this.renderer.useScene(scene);
@@ -392,17 +378,18 @@ class Toy {
 function main() {
     let canvas = document.getElementById("main-canvas"),
         controls = [
-        "vshader-source", "fshader-source", "uniforms",
-        "vertices", "triangles",
-        "load", "save", "reload"
-    ].map(i => document.getElementById(i));
-    toy = new Toy(canvas, document.body, ...controls);
+            "vshader-source", "fshader-source", "uniforms",
+            "vertices", "triangles",
+            "load", "save", "reload"
+        ].map(i => document.getElementById(i));
+    window.toy = new Toy(canvas, document.body, ...controls);
     window.onhashchange = () => {
         if (window.location.hash)
-            toy.loadGist(window.location.hash.slice(1))
+            window.toy.loadGist(window.location.hash.slice(1));
     };
-    if (window.location.hash) toy.loadGist(window.location.hash.slice(1));
-    else toy.reload();
+    if (window.location.hash)
+        window.toy.loadGist(window.location.hash.slice(1));
+    else window.toy.reload();
 }
 
 window.onload = main;
